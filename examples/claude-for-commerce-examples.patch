@@ -1,0 +1,20 @@
+diff --git a/storefront/api/main.py b/storefront/api/main.py
+index 617b95b..425be60 100644
+--- a/storefront/api/main.py
++++ b/storefront/api/main.py
+@@ -51,6 +51,7 @@ from .catalog_warmup import warm_catalog
+ from .identity import AgentToken, ShopSignIn, ShopSignInError, redirect_uri_from_env
+ from .shopify_backend import ShopifyStorefrontBackend, cart_gid
+ from .ucp_client import UcpClient, shop_domain_from_env
++from bounty_skill.blueprint import install as install_bounty
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -74,6 +75,7 @@ agent = ShoppingAgent(
+     config=build_shopping_config(store_name),
+     memory_store=InMemoryMemoryStore(),
+ )
++install_bounty(agent, default_store=store_name)
+ 
+ 
+ async def cart_extras(record) -> dict:

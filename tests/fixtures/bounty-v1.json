@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://api.nctr.live/schema/bounty/v1.json",
+  "title": "Open Bounty Schema",
+  "description": "Describes value paid to the shopper at the purchase. One object answers: does buying here pay the shopper?",
+  "type": "object",
+  "required": [
+    "bounty_schema_version",
+    "active",
+    "program",
+    "earn",
+    "updated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "bounty_schema_version": {
+      "type": "string",
+      "description": "Spec version this object conforms to.",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "examples": [
+        "0.1",
+        "0.4"
+      ]
+    },
+    "active": {
+      "type": "boolean",
+      "description": "Whether a bounty is currently offered. False is a meaningful, honest answer."
+    },
+    "program": {
+      "type": "object",
+      "description": "The rewards program behind the bounty.",
+      "required": [
+        "name",
+        "url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "earn": {
+      "type": "object",
+      "required": [
+        "display"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "display": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "ONE human sentence describing what the buyer earns. Agents show this verbatim, so it must be plain and truthful. Capped to keep it a sentence rather than a pitch."
+        },
+        "denomination": {
+          "type": "string",
+          "description": "What the earn is paid in.",
+          "examples": [
+            "NCTR",
+            "points",
+            "USD"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "points",
+            "token",
+            "cash",
+            "other"
+          ]
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "description": "For status-based programs: where standing lives and what it does.",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "api": {
+      "type": "string",
+      "format": "uri",
+      "description": "Live endpoint with authoritative, current bounty detail. Authoritative over any embedded copy."
+    },
+    "terms_url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "tokens": {
+      "type": "array",
+      "description": "Added in v0.3. Canonical Token Profile URLs for what this bounty can be paid in. URLs ONLY: a store never embeds an unlock catalog, because a catalog changes when a partner signs while a store's published object changes when the merchant redeploys — so an embedded copy is stale silently, and a URL can only be unreachable, which an agent can detect. Optional: a v0.1 or v0.2 object without it stays valid.",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "uniqueItems": true
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "store",
+        "selected"
+      ],
+      "default": "store",
+      "description": "Added in v0.4. What the bounty covers. `store` (the default, and the meaning of an object without this field): every purchase at the store qualifies. `selected`: only some products qualify, and an agent MUST confirm the product-level declaration on the product page (the JSON-LD Offer property or the per-product metafields, §1.1) before telling a shopper a given product earns. Optional: objects without it stay valid."
+    },
+    "listed_by": {
+      "type": "string",
+      "enum": [
+        "program",
+        "index",
+        "store"
+      ],
+      "description": "Added in v0.4. Who publishes this object (§3). `program`: the program that settles the bounty publishes it. `index`: an index publishes it on the store's behalf, and the store has no surface of its own carrying it. `store`: the store publishes it itself. Absent means no claim is made. A store-hosted object omits it or says `store`. Optional: objects without it stay valid."
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "ISO date of last change."
+    }
+  }
+}

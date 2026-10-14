@@ -1,0 +1,25 @@
+[project]
+name = "bounty-agent-skill"
+version = "0.1.0"
+description = "Open Bounty Schema discovery for shopping agents: spec §4, validated, never 'no'. A skill and tool for the Claude commerce-agents blueprint."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+dependencies = ["httpx>=0.27", "jsonschema>=4.21"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+bounty-check = "bounty_skill.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["bounty_skill"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
