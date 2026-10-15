@@ -17,7 +17,10 @@ It adds one skill (`open-bounty`) and one tool (`check_bounty`). The tool:
   claim);
 - **follows `api`** and **`tokens`** when present, and reports whether they answer;
 - handles **`scope: "selected"`** by checking a product page's own declaration;
-- reports **`unknown`, never "no"**, when nothing valid is published.
+- reports **`unknown`, never "no"**, when nothing valid is published;
+- reads the v0.5 **`rewards`** block, or derives it from the Token Profile when it's absent, and
+  returns one **comparable** summary for any program: what the unit is worth (as stated), the
+  entry-tier rule, the number of funded perks, and the ladder's depth.
 
 The skill tells the agent how to say all that: quote the sentence, name the program, don't compute
 values, never turn "unknown" into "no", and never present a planned or committed token unlock as
@@ -83,7 +86,7 @@ Nothing in the pinned blueprint packages is modified.
 |---|---|
 | Patched storefront imports and builds | executor `BountyShoppingToolExecutor`; last tool `check_bounty` with the cache breakpoint; `open-bounty` in the skill index and the static prompt |
 | The example's own test suite, patched | **231 passed**, the same as unpatched |
-| This repo's tests | 17 offline tests (every §4 path, validation, scope, unreachable api/tokens, https-only) and 4 against the real blueprint executor |
+| This repo's tests | 22 offline tests (every §4 path, validation, scope, unreachable api/tokens, https-only, v0.5 rewards read and derived), 4 of them against the real blueprint executor |
 
 **Store text is untrusted.** `check_bounty` returns its whole result through the executor's
 `_fenced(...)`, like every other record read in the blueprint: the earn sentence, the program
@@ -123,6 +126,8 @@ python -m bounty_skill merch.nctr.live --json
 | `api` | `{ url, status, reachable }` |
 | `tokens` | per Token Profile: `{ url, reachable, symbol, name, lifecycle, unlocks_summary }` |
 | `validated_against` | the schema `$id` and the object's version |
+| `rewards` | v0.5: the object's `rewards` block, or the same fields derived from the first reachable Token Profile (spec §7.4) |
+| `comparable` | `{ source, unit_value, entry_tier_rule, funded_perks, funded_perk_names, not_yet_available, ladder_depth, ladder_basis, ladder_unit }`. `source` is `rewards`, `token_profile` or `not_stated`; `null` means not stated, never zero |
 | `steps` | the discovery walk, request by request |
 | `reason` | for `unknown`: nothing published, or which object was invalid and why |
 

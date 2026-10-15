@@ -19,7 +19,7 @@
       "pattern": "^[0-9]+\\.[0-9]+$",
       "examples": [
         "0.1",
-        "0.4"
+        "0.5"
       ]
     },
     "active": {
@@ -128,6 +128,147 @@
         "store"
       ],
       "description": "Added in v0.4. Who publishes this object (§3). `program`: the program that settles the bounty publishes it. `index`: an index publishes it on the store's behalf, and the store has no surface of its own carrying it. `store`: the store publishes it itself. Absent means no claim is made. A store-hosted object omits it or says `store`. Optional: objects without it stay valid."
+    },
+    "rewards": {
+      "type": "object",
+      "description": "Added in v0.5. What the reward is worth and what it unlocks, so an agent can compare programs of different kinds on equal footing. Every member is optional, and the block itself is optional: objects without it stay valid. Absent means not stated, never 'none'. For a token program, the block MAY be omitted when `tokens` is present; an agent then derives it from the Token Profile (SPEC §7.4).",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "ONE plain sentence stating what the reward unit is worth, e.g. '100 points = $5 off at checkout'. Agents show it verbatim. Display over math: there is deliberately no rate or ratio field, and an agent must not compute one from this sentence."
+        },
+        "ladder": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "basis",
+            "rungs"
+          ],
+          "description": "The program's tiers, in order. Same shape as the Token Profile's status_ladder.",
+          "properties": {
+            "basis": {
+              "type": "string",
+              "enum": [
+                "earned",
+                "held",
+                "spend"
+              ],
+              "description": "What a member climbs by. `earned`: reward units earned. `held`: reward units held. `spend`: money spent at the store."
+            },
+            "unit": {
+              "type": "string",
+              "minLength": 1,
+              "description": "What `threshold` counts, in the program's own unit: an ISO 4217 code when basis is `spend` (\"USD\"), otherwise the unit's name (\"points\", \"NCTR\"). Without it, an agent must not state a threshold as an amount of money."
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 300,
+              "description": "What the ladder measures and over what period, in words (\"Spend is counted over the last 12 months.\"). As in the Token Profile's status_ladder."
+            },
+            "rungs": {
+              "type": "array",
+              "description": "ANY length: no minItems and no enum of rung names. The first rung is the entry tier when its threshold is 0; when it is above 0, members below it hold no rung yet.",
+              "items": {
+                "type": "object",
+                "required": [
+                  "rung",
+                  "threshold"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "rung": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The member-facing name, when it differs from `rung`."
+                  },
+                  "threshold": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Where this rung starts, in the ladder's unit. The entry tier is usually 0."
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "perks": {
+          "type": "array",
+          "description": "What membership unlocks beyond the earn. Each perk carries the same closed state enum as a Token Profile unlock: agents may present only `funded` perks as available.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "state"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "planned",
+                  "committed",
+                  "funded"
+                ],
+                "description": "planned: in design, never presentable as available. committed: a written commitment is on file, not yet available. funded: available now. Closed, as in the Token Profile."
+              },
+              "sponsor": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Named only where the partner granted attribution and the perk is committed or funded. A planned perk never names a sponsor."
+              }
+            },
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "planned"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "sponsor": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        },
+        "redeem_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Where a member spends the reward."
+        },
+        "terms_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "The reward's own terms, when they differ from the object's terms_url."
+        }
+      }
     },
     "updated_at": {
       "type": "string",

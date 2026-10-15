@@ -62,6 +62,27 @@ cover every product.
   - `planned` means in design.
   - **Never present a planned or committed unlock as something the customer can get.**
 
+## Comparing programs
+
+`comparable` is the same summary for every program, so a points program and a token program
+can be set side by side. It comes from the store's `rewards` block, or is derived from its
+Token Profile when the block is absent (`source` says which).
+
+- **`unit_value`**: what the unit is worth, as the program states it. Quote it verbatim. If
+  it's `null`, say the program doesn't state a worth. **Don't compute one**: not from the
+  earn sentence, not from two programs' numbers, and not as a percentage back.
+- **`entry_tier_rule`**: the earn sentence (quote it) and the tier a new member starts at.
+- **`funded_perks`**: how many perks are available now, named in `funded_perk_names`. Only
+  these may be presented as available. `not_yet_available` counts committed and planned
+  perks: say they aren't available yet, if you mention them at all.
+- **`ladder_depth`**: how many tiers there are, with `ladder_basis` (earned, held or spend)
+  and `ladder_unit`. A spend threshold is money only in the unit named.
+- **`null` means not stated**, never zero or none. A program that states fewer fields isn't
+  a worse program; it has said less.
+
+When comparing, set the stated facts side by side and let the customer weigh them. Don't rank
+programs by a number you derived.
+
 ## Shape of the answer
 
 - One or two sentences: the quoted earn sentence, the program, and (only if useful) who published

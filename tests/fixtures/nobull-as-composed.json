@@ -1,0 +1,51 @@
+{
+  "bounty_schema_version": "0.5",
+  "active": true,
+  "program": {
+    "name": "NOBULL",
+    "url": "https://nobullproject.com/"
+  },
+  "earn": {
+    "display": "Members earn 1 Point per dollar, redeemable at checkout.",
+    "type": "points",
+    "denomination": "Points"
+  },
+  "rewards": {
+    "value": "100 Points = $5 off at checkout, on eligible products.",
+    "ladder": {
+      "basis": "spend",
+      "unit": "USD",
+      "rungs": [
+        {
+          "rung": "Foundation",
+          "threshold": 0
+        },
+        {
+          "rung": "Momentum",
+          "threshold": 250
+        },
+        {
+          "rung": "All In",
+          "threshold": 1000
+        }
+      ]
+    },
+    "perks": [
+      {
+        "name": "Standard Shipping",
+        "description": "Free orders $75+",
+        "state": "funded"
+      },
+      {
+        "name": "Early Access to Major Sale Events",
+        "state": "funded"
+      },
+      {
+        "name": "Early Access to Select Product Drops",
+        "state": "funded"
+      }
+    ],
+    "redeem_url": "https://nobullproject.com/pages/loyalty"
+  },
+  "updated_at": "2026-10-15"
+}

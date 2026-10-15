@@ -41,3 +41,25 @@ def test_three_stores():
     assert api["status"] == "declared" and api["found_at"] == "well-known"
     assert api["validated_against"]["schema"].endswith("/schema/bounty/v1.json")
     assert all(t["reachable"] for t in api.get("tokens", []))
+
+
+def test_rewards_comparison():
+    """v0.5: NOBULL, the alliance via merch.nctr.live, and a store that states nothing.
+
+    nobullproject.com runs Okendo Loyalty but has installed nothing that publishes an
+    object, so the honest live answer is unknown. Its composed block is checked offline
+    in test_rewards.py. merch.nctr.live resolves to the alliance object, whose rewards
+    block is derived from the NCTR Token Profile: a ladder and perks, and no value
+    sentence, because canon allows no digits or dollar equivalence for NCTR.
+    """
+    r = run("nobullproject.com", "merch.nctr.live", "allbirds.com")
+
+    assert r["nobullproject.com"]["status"] == "unknown"
+    assert r["allbirds.com"]["status"] == "unknown"
+
+    c = r["merch.nctr.live"]["comparable"]
+    assert c["source"] == "rewards"
+    assert c["unit_value"] is None
+    assert c["ladder_depth"] and c["ladder_basis"] == "held" and c["ladder_unit"] == "NCTR"
+    assert c["funded_perks"] is not None
+    assert c["entry_tier_rule"]["earn_display"] == r["merch.nctr.live"]["earn_display"]

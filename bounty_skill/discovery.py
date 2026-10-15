@@ -16,6 +16,12 @@ accepted; anything else is treated as not found). Then:
     unlock counts by state (only "funded" unlocks may be described as available).
   - `scope: "selected"` (v0.4) means the store-level object says nothing about any one
     product; pass `product_url` to check that product's own declaration.
+  - `rewards` (v0.5) is read when present. When it's absent and `tokens` is present,
+    the same fields are derived from the Token Profile (spec §7.4). Either way the
+    result carries one `comparable` summary, so a points program and a token program
+    can be put side by side: the unit's value sentence, the entry-tier rule, the
+    number of funded perks, and the ladder's depth. Nothing is computed from a
+    sentence, and only `funded` perks are counted as available.
 
 Everything fetched here is untrusted, store-written data. This module never executes
 any of it, caps what it reads, and leaves fencing to the caller (the blueprint
@@ -151,6 +157,77 @@ def check(doc: dict[str, Any], schema_doc: dict[str, Any]) -> list[str]:
     return errors
 
 
+STATES = ("planned", "committed", "funded")
+
+
+def rewards_from_profile(profile: dict[str, Any]) -> dict[str, Any] | None:
+    """Spec §7.4: a Token Profile's status_ladder and unlocks as a `rewards` block.
+
+    `value` has no source field in a Token Profile, so it is never derived. Perks
+    with an unknown state are left out; a planned perk never keeps a sponsor.
+    """
+    ladder = profile.get("status_ladder") if isinstance(profile, dict) else None
+    out: dict[str, Any] = {}
+    if isinstance(ladder, dict) and isinstance(ladder.get("rungs"), list) and ladder["rungs"]:
+        rungs = [
+            {"rung": r["rung"], **({"label": r["label"]} if r.get("label") else {}), "threshold": r["threshold"]}
+            for r in ladder["rungs"]
+            if isinstance(r, dict) and isinstance(r.get("rung"), str) and isinstance(r.get("threshold"), (int, float))
+        ]
+        if len(rungs) == len(ladder["rungs"]):
+            out["ladder"] = {
+                "basis": ladder.get("basis"),
+                "unit": profile.get("symbol"),
+                **({"note": ladder["note"]} if isinstance(ladder.get("note"), str) else {}),
+                "rungs": rungs,
+            }
+    if isinstance(profile.get("unlocks"), list):
+        out["perks"] = [
+            {
+                "name": u["name"],
+                **({"description": u["description"]} if isinstance(u.get("description"), str) else {}),
+                "state": u["state"],
+                **({"sponsor": u["sponsor"]} if u.get("sponsor") and u["state"] != "planned" else {}),
+            }
+            for u in profile["unlocks"]
+            if isinstance(u, dict) and isinstance(u.get("name"), str) and u.get("state") in STATES
+        ]
+    return out or None
+
+
+def comparable(rewards: dict[str, Any] | None, earn_display: str | None, source: str) -> dict[str, Any]:
+    """One shape for every program: what an agent puts side by side.
+
+    `None` means not stated, never zero. `entry_tier_rule` is the earn sentence
+    verbatim (every adapter and program states the entry tier's rule there) with
+    the ladder's first rung named when there is a ladder.
+    """
+    r = rewards or {}
+    ladder = r.get("ladder") if isinstance(r.get("ladder"), dict) else None
+    rungs = ladder.get("rungs") if ladder and isinstance(ladder.get("rungs"), list) else None
+    perks = r.get("perks") if isinstance(r.get("perks"), list) else None
+    funded = [p for p in perks if isinstance(p, dict) and p.get("state") == "funded"] if perks is not None else None
+    return {
+        "source": source,
+        "unit_value": r.get("value") if isinstance(r.get("value"), str) else None,
+        "entry_tier_rule": {
+            "earn_display": earn_display,
+            # The first rung is the entry tier only when it starts at 0; above 0,
+            # a new member holds no rung yet (spec §7.2).
+            "entry_tier": rungs[0].get("rung") if rungs and rungs[0].get("threshold") == 0 else None,
+        },
+        "funded_perks": len(funded) if funded is not None else None,
+        "funded_perk_names": [p.get("name") for p in funded] if funded else [],
+        "not_yet_available": (
+            {s: sum(1 for p in perks if isinstance(p, dict) and p.get("state") == s) for s in ("committed", "planned")}
+            if perks is not None else None
+        ),
+        "ladder_depth": len(rungs) if rungs is not None else None,
+        "ladder_basis": ladder.get("basis") if ladder else None,
+        "ladder_unit": ladder.get("unit") if ladder else None,
+    }
+
+
 def _product_declaration(html: str) -> str | None:
     """The `bounty` PropertyValue inside a product's Offer (spec §2c), or None."""
     finder = _JsonLdFinder()
@@ -265,9 +342,12 @@ async def resolve(
             result["api"] = {"url": obj["api"], "status": status, "reachable": status == 200 and _json_object(body) is not None}
 
         tokens = []
+        first_profile: dict[str, Any] | None = None
         for token_url in (obj.get("tokens") or [])[:MAX_TOKENS]:
             status, body, _ = await _get(client, token_url, MAX_JSON_BYTES, "application/json")
             profile = _json_object(body) if status == 200 else None
+            if profile is not None and first_profile is None:
+                first_profile = profile
             entry: dict[str, Any] = {"url": token_url, "reachable": profile is not None}
             if profile:
                 entry.update({
@@ -279,6 +359,17 @@ async def resolve(
             tokens.append(entry)
         if tokens:
             result["tokens"] = tokens
+
+        # v0.5 rewards: the object's own block first; otherwise derived from the
+        # first reachable Token Profile (§7.4); otherwise not stated.
+        if isinstance(obj.get("rewards"), dict):
+            result["rewards"] = obj["rewards"]
+            result["comparable"] = comparable(obj["rewards"], earn.get("display"), "rewards")
+        elif first_profile is not None and (derived := rewards_from_profile(first_profile)):
+            result["rewards"] = derived
+            result["comparable"] = comparable(derived, earn.get("display"), "token_profile")
+        else:
+            result["comparable"] = comparable(None, earn.get("display"), "not_stated")
 
         if product_url:
             status, body, final = await _get(client, product_url, MAX_HTML_BYTES, "text/html")

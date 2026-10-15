@@ -30,6 +30,18 @@ def _summary(r: dict) -> str:
         for t in r.get("tokens", []):
             lines.append(f"    token: {t.get('symbol') or '?'} {t['url']} → {'reachable' if t['reachable'] else 'NOT reachable'}"
                          + (f" · unlocks {t['unlocks_summary']}" if t.get("unlocks_summary") else ""))
+        c = r.get("comparable")
+        if c:
+            src = {"rewards": "from the object's rewards block", "token_profile": "derived from the Token Profile", "not_stated": "no rewards stated"}[c["source"]]
+            lines.append(f"    comparable ({src}):")
+            lines.append(f'      unit value: {chr(34) + c["unit_value"] + chr(34) if c["unit_value"] else "not stated"}')
+            et = c["entry_tier_rule"]
+            lines.append(f'      entry-tier rule: "{et["earn_display"]}"' + (f' (entry tier: {et["entry_tier"]})' if et["entry_tier"] else ""))
+            fp = c["funded_perks"]
+            lines.append(f"      funded perks: {'not stated' if fp is None else fp}" + (f" ({', '.join(c['funded_perk_names'])})" if c["funded_perk_names"] else "")
+                         + (f" · not yet available: {c['not_yet_available']['committed']} committed, {c['not_yet_available']['planned']} planned" if c["not_yet_available"] and any(c["not_yet_available"].values()) else ""))
+            lines.append(f"      ladder depth: {'not stated' if c['ladder_depth'] is None else c['ladder_depth']}"
+                         + (f" ({c['ladder_basis']}, in {c['ladder_unit']})" if c["ladder_depth"] else ""))
         if "product" in r:
             p = r["product"]
             lines.append(f"    product {p['url']}: {'declares' if p['declared'] else 'no product-level declaration'}"
