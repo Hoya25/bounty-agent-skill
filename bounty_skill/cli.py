@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""python -m bounty_skill <store-domain> [<store-domain> ...] [--product URL] [--json]
+"""python -m bounty_skill <store-domain> [<store-domain> ...] [--product URL] [--locale fr] [--goal TAG ...] [--json]
 
 Runs the spec §4 discovery for each store and prints what an agent would report.
 Exit code 0 always for a completed check: "unknown" is an answer, not an error.
@@ -25,6 +25,19 @@ def _summary(r: dict) -> str:
         lines.append(f"    program: {program.get('name')} ({program.get('url')})")
         lines.append(f"    listed_by: {r.get('listed_by') or '(absent, no publisher claimed)'} · found_at: {r.get('found_at')} · scope: {r.get('scope')}")
         lines.append(f"    validated against {r['validated_against']['schema']} · object version {r['validated_against']['object_version']}")
+        lines.append(f"    signature: {r.get('signature')}" + (f" (by {r['signed_by']})" if r.get("signed_by") else ""))
+        if r.get("inactive_reason"):
+            lines.append(f"    inactive: {r['inactive_reason']}")
+        if r.get("eligibility"):
+            e = r["eligibility"]
+            lines.append(f"    for: {e.get('who')}" + (f" — {e['note']}" if e.get("note") else "") + (f" · join: {e['join_url']}" if e.get("join_url") else ""))
+        for c in r.get("conditions") or []:
+            lines.append(f"    condition ({c.get('type')}): {c.get('note')}")
+        if r.get("stacking"):
+            lines.append(f"    stacking: {r['stacking'].get('note') or r['stacking'].get('combinable')}")
+        if r.get("verification"):
+            v = r["verification"]
+            lines.append(f"    verification: {v.get('method')}" + (f" by {v['by']} at {v['checked_at']}" if v.get("by") else ""))
         if "api" in r:
             lines.append(f"    api: {r['api']['url']} → {'reachable' if r['api']['reachable'] else 'NOT reachable'} ({r['api']['status']})")
         for t in r.get("tokens", []):
@@ -46,7 +59,13 @@ def _summary(r: dict) -> str:
             p = r["product"]
             lines.append(f"    product {p['url']}: {'declares' if p['declared'] else 'no product-level declaration'}"
                          + (f' "{p["earn_display"]}"' if p.get("earn_display") else ""))
-    else:
+    if r.get("goal_matches"):
+        g = r["goal_matches"]
+        lines.append(f"    goals {', '.join(g['goals'])}: available {[x['name'] for x in g['available']] or 'none'}"
+                     + (f" · not yet available {[(x['name'], x['state']) for x in g['not_yet_available']]}" if g["not_yet_available"] else ""))
+    if r["status"] not in ("declared", "inactive"):
+        if r.get("signature") == "invalid":
+            lines.append("    signature: INVALID (hard stop: nothing from the object is used)")
         lines.append(f"    reason: {r.get('reason')}")
         lines.append("    (unknown is not \"no\": nothing valid was published)")
     return "\n".join(lines)
@@ -56,9 +75,11 @@ async def _main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="python -m bounty_skill", description=__doc__.splitlines()[0])
     parser.add_argument("stores", nargs="+")
     parser.add_argument("--product", help="a product page URL to check (for scope: selected)")
+    parser.add_argument("--locale", help="the shopper's locale, for a localized earn.display (e.g. fr, pt-br)")
+    parser.add_argument("--goal", action="append", default=[], help="a goal tag to match locally (repeatable), e.g. --goal concert_tickets")
     parser.add_argument("--json", action="store_true", help="print the raw results as JSON")
     args = parser.parse_args(argv)
-    results = [await resolve(s, product_url=args.product) for s in args.stores]
+    results = [await resolve(s, product_url=args.product, locale=args.locale, goals=args.goal or None) for s in args.stores]
     if args.json:
         print(json.dumps(results, indent=2, ensure_ascii=False))
     else:

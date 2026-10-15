@@ -18,6 +18,8 @@ It adds one skill (`open-bounty`) and one tool (`check_bounty`). The tool:
 - **follows `api`** and **`tokens`** when present, and reports whether they answer;
 - handles **`scope: "selected"`** by checking a product page's own declaration;
 - reports **`unknown`, never "no"**, when nothing valid is published;
+- checks **signed objects** (v0.6 §9) and stops on an invalid signature;
+- reads the v0.6 **completeness** fields (who it's for, conditions, dates, currency, stacking, verification) and matches the customer's **goals** to perks locally;
 - reads the v0.5 **`rewards`** block, or derives it from the Token Profile when it's absent, and
   returns one **comparable** summary for any program: what the unit is worth (as stated), the
   entry-tier rule, the number of funded perks, and the ladder's depth.
@@ -86,7 +88,7 @@ Nothing in the pinned blueprint packages is modified.
 |---|---|
 | Patched storefront imports and builds | executor `BountyShoppingToolExecutor`; last tool `check_bounty` with the cache breakpoint; `open-bounty` in the skill index and the static prompt |
 | The example's own test suite, patched | **231 passed**, the same as unpatched |
-| This repo's tests | 22 offline tests (every §4 path, validation, scope, unreachable api/tokens, https-only, v0.5 rewards read and derived), 4 of them against the real blueprint executor |
+| This repo's tests | 34 offline tests (every §4 path, validation, scope, unreachable api/tokens, https-only, v0.5 rewards, v0.6 signatures incl. six ways to be invalid, locale, dates, goals), 4 of them against the real blueprint executor |
 
 **Store text is untrusted.** `check_bounty` returns its whole result through the executor's
 `_fenced(...)`, like every other record read in the blueprint: the earn sentence, the program
@@ -127,6 +129,10 @@ python -m bounty_skill merch.nctr.live --json
 | `tokens` | per Token Profile: `{ url, reachable, symbol, name, lifecycle, unlocks_summary }` |
 | `validated_against` | the schema `$id` and the object's version |
 | `rewards` | v0.5: the object's `rewards` block, or the same fields derived from the first reachable Token Profile (spec §7.4) |
+| `signature` | v0.6 §9: `signed` (with `signed_by`, the origin), `unsigned`, or `invalid`. **Invalid is a hard stop**: `status` is `unknown` and nothing from the object is returned |
+| `currency`, `eligibility`, `conditions`, `valid_from`, `valid_until`, `stacking`, `verification` | v0.6 fields, passed through as published. Outside the validity window, `status` is `inactive` with an `inactive_reason` |
+| `earn_display_locale` | which entry of a localized `earn.display` was used (`--locale` / `locale`), or `default` |
+| `goal_matches` | with `goals`: `{ goals, available, not_yet_available }`, matched locally against `fulfills` tags. Only funded items are available |
 | `comparable` | `{ source, unit_value, entry_tier_rule, funded_perks, funded_perk_names, not_yet_available, ladder_depth, ladder_basis, ladder_unit }`. `source` is `rewards`, `token_profile` or `not_stated`; `null` means not stated, never zero |
 | `steps` | the discovery walk, request by request |
 | `reason` | for `unknown`: nothing published, or which object was invalid and why |

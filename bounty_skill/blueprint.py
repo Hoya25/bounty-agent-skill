@@ -37,7 +37,8 @@ BOUNTY_TOOL: dict[str, Any] = {
         "published Open Bounty declaration. Returns status (declared, inactive, or "
         "unknown), the store's earn sentence verbatim, the program, and who published it. "
         "Leave store_domain empty for this store. Pass product_url to check one product "
-        "when the declaration covers selected products only."
+        "when the declaration covers selected products only. Pass goals (tags such as "
+        "concert_tickets) to match the program's perks locally; only funded ones are available."
     ),
     "input_schema": {
         "type": "object",
@@ -49,6 +50,15 @@ BOUNTY_TOOL: dict[str, Any] = {
             "product_url": {
                 "type": "string",
                 "description": "Full https URL of one product page on that store, when needed.",
+            },
+            "goals": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "The customer's goals as tags (concert_tickets, gym_membership, travel …). Matched on this server; never sent to the store or program.",
+            },
+            "locale": {
+                "type": "string",
+                "description": "The customer's locale (e.g. fr, pt-br), for a store that states its sentence in several languages.",
             },
         },
         "additionalProperties": False,
@@ -70,7 +80,9 @@ def make_executor_class(base: type, default_store: str | None = None) -> type:
             if not store:
                 return ToolOutcome.error("No store domain is configured; ask which store they mean.")
             product_url = self._sanitize(tool_input.get("product_url") or "", 2048) or None
-            result = await discovery.resolve(store, product_url=product_url)
+            goals = [self._sanitize(str(g), 64) for g in (tool_input.get("goals") or [])[:20] if isinstance(g, str)]
+            locale = self._sanitize(tool_input.get("locale") or "", 16) or None
+            result = await discovery.resolve(store, product_url=product_url, locale=locale, goals=goals or None)
             return self._fenced(result)
 
     BountyToolExecutor.__name__ = f"Bounty{base.__name__}"

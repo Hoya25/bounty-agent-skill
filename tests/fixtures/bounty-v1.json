@@ -19,7 +19,7 @@
       "pattern": "^[0-9]+\\.[0-9]+$",
       "examples": [
         "0.1",
-        "0.5"
+        "0.6"
       ]
     },
     "active": {
@@ -53,10 +53,36 @@
       "additionalProperties": false,
       "properties": {
         "display": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 200,
-          "description": "ONE human sentence describing what the buyer earns. Agents show this verbatim, so it must be plain and truthful. Capped to keep it a sentence rather than a pitch."
+          "description": "ONE human sentence describing what the buyer earns. Agents show this verbatim, so it must be plain and truthful. Capped to keep it a sentence rather than a pitch. Since v0.6 it MAY instead be an object keyed by locale (BCP 47, lower-case language) with a required `default`; each value is one sentence, and agents show the one matching the shopper's locale, else `default`, verbatim.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "object",
+              "required": [
+                "default"
+              ],
+              "minProperties": 1,
+              "properties": {
+                "default": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "patternProperties": {
+                "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
         },
         "denomination": {
           "type": "string",
@@ -237,6 +263,15 @@
                   "null"
                 ],
                 "description": "Named only where the partner granted attribution and the perk is committed or funded. A planned perk never names a sponsor."
+              },
+              "fulfills": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{1,40}$"
+                },
+                "description": "Added in v0.6. Goal tags this perk serves (spec §8). Open vocabulary; agents match a shopper's goals to tags locally and present only funded perks as available."
               }
             },
             "if": {
@@ -267,6 +302,172 @@
           "type": "string",
           "format": "uri",
           "description": "The reward's own terms, when they differ from the object's terms_url."
+        }
+      }
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "Added in v0.6. ISO 4217 code of the currency the earn and any amounts in this object are stated in. A program that earns in more than one currency publishes one object per currency."
+    },
+    "eligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "who"
+      ],
+      "description": "Added in v0.6. Who the bounty is for. Absent means not stated, which is not the same as anyone.",
+      "properties": {
+        "who": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,40}$",
+          "description": "Open vocabulary. Starter terms: anyone, members, new_customers, new_subscribers, group. An agent that doesn't know a term shows `note` and says the bounty is limited."
+        },
+        "join_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Where a shopper becomes eligible (joins, signs up)."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "One sentence, in words, shown as written."
+        }
+      }
+    },
+    "conditions": {
+      "type": "array",
+      "description": "Added in v0.6. Conditions on the bounty, each with a sentence an agent shows. `type` is an open vocabulary; `value` is machine-readable where it helps, `note` is what is said.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "note"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{1,40}$",
+            "description": "Starter terms: min_order, excluded_categories, subscription_only, first_order, once_per_customer, limited_time, pending_period, points_expire."
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ],
+            "description": "Optional machine-readable value (a minimum in `currency`, a number of days). Never a rate."
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "valid_from": {
+      "type": "string",
+      "anyOf": [
+        {
+          "format": "date"
+        },
+        {
+          "format": "date-time"
+        }
+      ],
+      "description": "Added in v0.6. ISO date or date-time the bounty starts. Before it, agents treat the object as inactive."
+    },
+    "valid_until": {
+      "type": "string",
+      "anyOf": [
+        {
+          "format": "date"
+        },
+        {
+          "format": "date-time"
+        }
+      ],
+      "description": "Added in v0.6. ISO date or date-time the bounty ends. After it, the object is inactive whatever `active` says."
+    },
+    "stacking": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "combinable"
+      ],
+      "description": "Added in v0.6. Whether the bounty combines with other discounts or offers.",
+      "properties": {
+        "combinable": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method"
+      ],
+      "description": "Added in v0.6. How the publisher knows this store pays, for objects an index or program publishes (§3.2). Closed enum: an agent weighs the claim on it.",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "program_data",
+            "order_sample",
+            "attestation",
+            "none"
+          ],
+          "description": "program_data: the program's own settlement data shows the store paying. order_sample: test orders were placed and paid out. attestation: the store attested in writing. none: listed, not verified."
+        },
+        "checked_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Who checked: a name or a URL."
+        }
+      },
+      "if": {
+        "properties": {
+          "method": {
+            "enum": [
+              "program_data",
+              "order_sample",
+              "attestation"
+            ]
+          }
+        },
+        "required": [
+          "method"
+        ]
+      },
+      "then": {
+        "required": [
+          "checked_at",
+          "by"
+        ],
+        "properties": {
+          "checked_at": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string"
+          }
         }
       }
     },

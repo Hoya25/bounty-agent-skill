@@ -16,6 +16,15 @@ accepted; anything else is treated as not found). Then:
     unlock counts by state (only "funded" unlocks may be described as available).
   - `scope: "selected"` (v0.4) means the store-level object says nothing about any one
     product; pass `product_url` to check that product's own declaration.
+  - v0.6: a signed object (spec §9: a detached JWS in `Bounty-Signature`, keys at
+    the object's origin `/.well-known/bounty-keys.json`) is reported `signed`; no
+    header is `unsigned`; anything that fails is `invalid`, a HARD STOP: nothing
+    from the object is used and the store is reported unknown.
+  - v0.6: a localized `earn.display` is shown in the shopper's locale, else its
+    `default`; an object outside `valid_from`/`valid_until` is inactive;
+    eligibility, conditions, stacking, currency and verification are passed
+    through; goals are matched to `fulfills` tags locally, and only funded items
+    count as available.
   - `rewards` (v0.5) is read when present. When it's absent and `tokens` is present,
     the same fields are derived from the Token Profile (spec §7.4). Either way the
     result carries one `comparable` summary, so a points program and a token program
@@ -37,7 +46,12 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
+import base64
+from datetime import datetime, timezone
+
 import httpx
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from jsonschema import Draft202012Validator, FormatChecker
 
 SCHEMA_URL = "https://api.nctr.live/schema/bounty/v1.json"
@@ -111,14 +125,19 @@ def normalize_domain(value: str) -> str | None:
     return host if _HOST.match(host) else None
 
 
-async def _get(client: httpx.AsyncClient, url: str, limit: int, accept: str) -> tuple[int, bytes, str]:
-    """Status, body (capped) and final URL. Only https is ever fetched."""
+async def _get(
+    client: httpx.AsyncClient, url: str, limit: int, accept: str, headers_out: dict[str, str] | None = None,
+) -> tuple[int, bytes, str]:
+    """Status, body (capped) and final URL. Only https is ever fetched.
+    `headers_out`, when given, receives the response headers (lower-cased names)."""
     if urlsplit(url).scheme != "https":
         return 0, b"", url
     try:
         async with client.stream("GET", url, headers={"Accept": accept}) as res:
             if urlsplit(str(res.url)).scheme != "https":
                 return 0, b"", str(res.url)
+            if headers_out is not None:
+                headers_out.update({k.lower(): v for k, v in res.headers.items()})
             body = b""
             async for chunk in res.aiter_bytes():
                 body += chunk
@@ -188,6 +207,7 @@ def rewards_from_profile(profile: dict[str, Any]) -> dict[str, Any] | None:
                 **({"description": u["description"]} if isinstance(u.get("description"), str) else {}),
                 "state": u["state"],
                 **({"sponsor": u["sponsor"]} if u.get("sponsor") and u["state"] != "planned" else {}),
+                **({"fulfills": u["fulfills"]} if isinstance(u.get("fulfills"), list) else {}),
             }
             for u in profile["unlocks"]
             if isinstance(u, dict) and isinstance(u.get("name"), str) and u.get("state") in STATES
@@ -228,6 +248,110 @@ def comparable(rewards: dict[str, Any] | None, earn_display: str | None, source:
     }
 
 
+# ── v0.6 §9: signed objects ─────────────────────────────────────────────────
+
+KEYS_TTL_S = 600
+_keys_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+
+
+def _b64url_decode(s: str) -> bytes:
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def _b64url(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode("ascii")
+
+
+async def _keys(client: httpx.AsyncClient, origin: str) -> dict[str, Any] | None:
+    hit = _keys_cache.get(origin)
+    if hit and time.monotonic() - hit[0] < KEYS_TTL_S:
+        return hit[1]
+    status, body, _ = await _get(client, f"{origin}/.well-known/bounty-keys.json", MAX_JSON_BYTES, "application/json")
+    doc = _json_object(body) if status == 200 else None
+    _keys_cache[origin] = (time.monotonic(), doc)
+    return doc
+
+
+def verify_signature(header: str, body: bytes, jwks: dict[str, Any] | None) -> tuple[str, str]:
+    """Pure: ("signed", kid) or ("invalid", why) for a Bounty-Signature header over `body`."""
+    parts = header.strip().split(".")
+    if len(parts) != 3 or parts[1] != "":
+        return "invalid", "not a detached JWS"
+    try:
+        protected = json.loads(_b64url_decode(parts[0]))
+        sig = _b64url_decode(parts[2])
+    except (ValueError, TypeError):
+        return "invalid", "malformed"
+    if protected.get("alg") != "EdDSA":
+        return "invalid", f"unsupported alg {protected.get('alg')!r}"
+    if not jwks or not isinstance(jwks.get("keys"), list):
+        return "invalid", "the origin's key set couldn't be read"
+    key = next((k for k in jwks["keys"] if isinstance(k, dict) and k.get("kid") == protected.get("kid")), None)
+    if not key or key.get("kty") != "OKP" or key.get("crv") != "Ed25519" or not isinstance(key.get("x"), str):
+        return "invalid", f"no Ed25519 key with kid {protected.get('kid')!r} at the origin"
+    try:
+        Ed25519PublicKey.from_public_bytes(_b64url_decode(key["x"])).verify(sig, f"{parts[0]}.{_b64url(body)}".encode("ascii"))
+    except (InvalidSignature, ValueError):
+        return "invalid", "the signature doesn't match the object"
+    return "signed", str(protected.get("kid"))
+
+
+# ── v0.6 completeness and goals ─────────────────────────────────────────────
+
+def pick_display(display: Any, locale: str | None) -> tuple[str | None, str | None]:
+    """A localized earn.display → (sentence, the key used). Exact locale, then its language, then default."""
+    if isinstance(display, str) or display is None:
+        return display, None
+    if not isinstance(display, dict):
+        return None, None
+    want = (locale or "").lower()
+    for key in (want, want.split("-")[0]):
+        if key and isinstance(display.get(key), str):
+            return display[key], key
+    return display.get("default"), "default"
+
+
+def _instant(v: Any) -> datetime | None:
+    if not isinstance(v, str):
+        return None
+    try:
+        d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def outside_window(obj: dict[str, Any], now: datetime | None = None) -> str | None:
+    """Why the object is outside its validity window, or None. A date-only valid_until runs to the end of that day."""
+    now = now or datetime.now(timezone.utc)
+    start, end = _instant(obj.get("valid_from")), _instant(obj.get("valid_until"))
+    if isinstance(obj.get("valid_until"), str) and len(obj["valid_until"]) == 10 and end:
+        end = end.replace(hour=23, minute=59, second=59)
+    if start and now < start:
+        return f"not started (valid_from {obj['valid_from']})"
+    if end and now > end:
+        return f"ended (valid_until {obj['valid_until']})"
+    return None
+
+
+def match_goals(goals: list[str], items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Spec §8, matched here and never sent anywhere: funded items whose tags meet a goal are
+    available; committed or planned matches are listed as not yet available."""
+    want = {g.strip().lower() for g in goals if isinstance(g, str) and g.strip()}
+    available, later = [], []
+    for it in items:
+        tags = set(it.get("fulfills") or []) if isinstance(it, dict) else set()
+        hit = sorted(tags & want)
+        if not hit:
+            continue
+        entry = {"name": it.get("name"), "matches": hit}
+        if it.get("state") == "funded":
+            available.append({**entry, **({"description": it["description"]} if it.get("description") else {})})
+        elif it.get("state") in ("committed", "planned"):
+            later.append({**entry, "state": it["state"]})
+    return {"goals": sorted(want), "available": available, "not_yet_available": later}
+
+
 def _product_declaration(html: str) -> str | None:
     """The `bounty` PropertyValue inside a product's Offer (spec §2c), or None."""
     finder = _JsonLdFinder()
@@ -254,6 +378,8 @@ async def resolve(
     store: str,
     *,
     product_url: str | None = None,
+    locale: str | None = None,
+    goals: list[str] | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
     """Run §4 for one store. Never raises for network or data problems: anything that
@@ -271,11 +397,12 @@ async def resolve(
         if schema_doc is None:
             return {"store": domain, "status": "unknown", "reason": "the schema could not be fetched, so nothing could be validated", "steps": steps}
 
-        found: tuple[str, str, dict[str, Any]] | None = None
+        found: tuple[str, str, dict[str, Any], bytes, str | None] | None = None
 
         # Step 1: the well-known path.
         url = f"https://{domain}/.well-known/bounty.json"
-        status, body, final = await _get(client, url, MAX_JSON_BYTES, "application/json")
+        h1: dict[str, str] = {}
+        status, body, final = await _get(client, url, MAX_JSON_BYTES, "application/json", h1)
         doc = _json_object(body) if status == 200 else None
         steps.append(f"1 GET {url} → {status or 'no response'}{'' if doc or status != 200 else ' (not a JSON object)'}")
         if doc is not None:
@@ -284,7 +411,7 @@ async def resolve(
                 rejected.append(f"{final}: {'; '.join(errors[:3])}")
                 steps.append("  found, but not a valid object → continuing")
             else:
-                found = ("well-known", final, doc)
+                found = ("well-known", final, doc, body, h1.get("bounty-signature"))
 
         # Step 2: <link rel="bounty"> on the home page.
         if found is None:
@@ -296,7 +423,8 @@ async def resolve(
             steps.append(f"2 GET {home} → {status or 'no response'}; rel=\"bounty\" link {'found' if finder.href else 'not found'}")
             if finder.href:
                 href = urljoin(final_home, finder.href)
-                status, body, final = await _get(client, href, MAX_JSON_BYTES, "application/json")
+                h2: dict[str, str] = {}
+                status, body, final = await _get(client, href, MAX_JSON_BYTES, "application/json", h2)
                 doc = _json_object(body) if status == 200 else None
                 steps.append(f"  GET {href} → {status or 'no response'}")
                 if doc is not None:
@@ -305,7 +433,7 @@ async def resolve(
                         rejected.append(f"{final}: {'; '.join(errors[:3])}")
                         steps.append("  found, but not a valid object")
                     else:
-                        found = ("link", final, doc)
+                        found = ("link", final, doc, body, h2.get("bounty-signature"))
 
         if found is None:
             steps.append("3 unknown")
@@ -317,14 +445,39 @@ async def resolve(
                 "note": "Unknown means nothing valid was found. It is not a statement that buying here pays nothing.",
             }
 
-        via, object_url, obj = found
+        via, object_url, obj, raw, sig_header = found
+
+        # v0.6 §9: check the signature before anything in the object is used.
+        signature, signed_by = "unsigned", None
+        if sig_header:
+            parts = urlsplit(object_url)
+            origin = f"{parts.scheme}://{parts.netloc}"
+            signature, detail = verify_signature(sig_header, raw, await _keys(client, origin))
+            steps.append(f"  Bounty-Signature → {signature}" + (f" (kid {detail}, {origin})" if signature == "signed" else f": {detail}"))
+            if signature == "invalid":
+                return {
+                    "store": domain,
+                    "status": "unknown",
+                    "signature": "invalid",
+                    "reason": f"the object's signature is invalid ({detail}), so nothing in it is used",
+                    "steps": steps,
+                    "note": "An invalid signature is a hard stop (spec §9). Report the store as unknown and say the signature failed.",
+                }
+            signed_by = origin
+
         earn = obj.get("earn") or {}
+        display, display_locale = pick_display(earn.get("display"), locale)
+        window = outside_window(obj)
         result: dict[str, Any] = {
             "store": domain,
-            "status": "declared" if obj.get("active") is True else "inactive",
+            "status": "declared" if obj.get("active") is True and not window else "inactive",
+            **({"inactive_reason": window} if window else {}),
+            "signature": signature,
+            **({"signed_by": signed_by} if signed_by else {}),
             "found_at": via,
             "object_url": object_url,
-            "earn_display": earn.get("display"),
+            "earn_display": display,
+            **({"earn_display_locale": display_locale} if display_locale else {}),
             "earn_type": earn.get("type"),
             "denomination": earn.get("denomination"),
             "program": obj.get("program"),
@@ -333,6 +486,7 @@ async def resolve(
             "status_page": (obj.get("status") or {}).get("url"),
             "terms_url": obj.get("terms_url"),
             "updated_at": obj.get("updated_at"),
+            **{k: obj[k] for k in ("currency", "eligibility", "conditions", "valid_from", "valid_until", "stacking", "verification") if k in obj},
             "validated_against": {"schema": schema_doc.get("$id", SCHEMA_URL), "object_version": obj.get("bounty_schema_version")},
             "steps": steps,
         }
@@ -364,12 +518,20 @@ async def resolve(
         # first reachable Token Profile (§7.4); otherwise not stated.
         if isinstance(obj.get("rewards"), dict):
             result["rewards"] = obj["rewards"]
-            result["comparable"] = comparable(obj["rewards"], earn.get("display"), "rewards")
+            result["comparable"] = comparable(obj["rewards"], display, "rewards")
         elif first_profile is not None and (derived := rewards_from_profile(first_profile)):
             result["rewards"] = derived
-            result["comparable"] = comparable(derived, earn.get("display"), "token_profile")
+            result["comparable"] = comparable(derived, display, "token_profile")
         else:
-            result["comparable"] = comparable(None, earn.get("display"), "not_stated")
+            result["comparable"] = comparable(None, display, "not_stated")
+        result["comparable"]["eligibility_who"] = (obj.get("eligibility") or {}).get("who")
+        result["comparable"]["condition_notes"] = [c.get("note") for c in obj.get("conditions") or [] if isinstance(c, dict)]
+        result["comparable"]["verification"] = (obj.get("verification") or {}).get("method")
+        result["comparable"]["signature"] = signature
+
+        if goals:
+            perks = (result.get("rewards") or {}).get("perks") or []
+            result["goal_matches"] = match_goals(goals, perks)
 
         if product_url:
             status, body, final = await _get(client, product_url, MAX_HTML_BYTES, "text/html")
