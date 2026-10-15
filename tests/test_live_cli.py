@@ -63,3 +63,11 @@ def test_rewards_comparison():
     assert c["ladder_depth"] and c["ladder_basis"] == "held" and c["ladder_unit"] == "NCTR"
     assert c["funded_perks"] is not None
     assert c["entry_tier_rule"]["earn_display"] == r["merch.nctr.live"]["earn_display"]
+
+
+def test_alliance_objects_are_signed():
+    """v0.6 §9: the alliance signs what api.nctr.live serves; the skill verifies it."""
+    r = run("merch.nctr.live", "api.nctr.live")
+    for store in ("merch.nctr.live", "api.nctr.live"):
+        assert r[store]["signature"] == "signed", store
+        assert r[store]["signed_by"] == "https://api.nctr.live"
