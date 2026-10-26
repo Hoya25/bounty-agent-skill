@@ -1,0 +1,22 @@
+{
+  "name": "bounty",
+  "displayName": "Bounty",
+  "version": "1.0.0",
+  "description": "What a purchase at a store earns, from the store's own Open Bounty Schema declaration, plus an index of 6,000+ stores where NCTR Alliance members earn. Read-only.",
+  "author": {
+    "name": "Butterfly Studios",
+    "email": "hello@butterflystudios.live",
+    "url": "https://github.com/Hoya25"
+  },
+  "homepage": "https://github.com/Hoya25/bounty-agent-skill/tree/main/plugin",
+  "repository": "https://github.com/Hoya25/bounty-agent-skill",
+  "license": "Apache-2.0",
+  "privacyPolicyUrl": "https://api.nctr.live/privacy",
+  "keywords": [
+    "rewards",
+    "loyalty",
+    "shopping",
+    "open-bounty-schema",
+    "points"
+  ]
+}

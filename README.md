@@ -7,6 +7,11 @@ storefront, answer **"do I earn anything buying here?"** from the store's publis
 [Open Bounty Schema](https://github.com/Hoya25/open-bounty-schema) declaration, and answer it
 truthfully.
 
+> **For Claude (claude.ai, Claude Desktop, Claude Code, Cowork):** use the plugin in
+> [`plugin/`](plugin/), which pairs the same skill, written for the hosted Bounty connector
+> (`get_bounty`, `search_stores` at `https://api.nctr.live/mcp/bounty`), with that connector. This
+> page covers the Python tool for the commerce-agents blueprint.
+
 It adds one skill (`open-bounty`) and one tool (`check_bounty`). The tool:
 
 - runs the spec's **§4 discovery order** for any store domain: `/.well-known/bounty.json`, then

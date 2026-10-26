@@ -1,6 +1,6 @@
 ---
 name: open-bounty
-description: Answering whether buying at a store pays the shopper a reward (points, credit, tokens, cash), when the customer asks if they earn anything here, whether this store has a rewards program, or what a purchase earns them. Not for discounts, prices or promotions (those are pricing questions), and not needed when the customer hasn't asked about rewards.
+description: Answering whether buying at a store pays the shopper a reward (points, store credit, tokens or perks), when the customer asks if they earn anything here, whether this store has a rewards program, or what a purchase earns them. Not for discounts, prices or promotions (those are pricing questions), and not needed when the customer hasn't asked about rewards.
 ---
 
 # Rewards on a purchase

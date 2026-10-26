@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "bounty": {
+      "type": "http",
+      "url": "https://api.nctr.live/mcp/bounty"
+    }
+  }
+}
