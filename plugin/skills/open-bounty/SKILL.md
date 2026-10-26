@@ -1,6 +1,6 @@
 ---
 name: open-bounty
-description: Report what a purchase at a store earns the shopper (points, store credit, tokens or perks) with the Bounty connector, which reads the store's declaration in the Open Bounty Schema, the open-source standard for rewards declarations, and searches an index of 6,000+ stores where NCTR Alliance members earn. Use when the shopper asks whether they earn anything buying at a store, whether a store has a rewards or loyalty program, what a purchase earns them, or where they can buy something and earn. Not for prices, discounts or promotions, and not when the shopper hasn't asked about rewards.
+description: Report what a purchase at a store earns the shopper (points, store credit, tokens or perks) with the Bounty connector, which reads the store's declaration in the Open Bounty Schema, the open-source standard for rewards declarations, and searches an open index of 6,000+ stores where a purchase earns. Use when the shopper asks whether they earn anything buying at a store, whether a store has a rewards or loyalty program, what a purchase earns them, or where they can buy something and earn. Not for prices, discounts or promotions, and not when the shopper hasn't asked about rewards.
 ---
 
 # Rewards on a purchase
@@ -10,8 +10,9 @@ The Bounty connector has two read-only tools:
 
 - **`get_bounty(domain, product?)`** reads one store's own declaration and checks it against the
   standard. Use it for any store the shopper names.
-- **`search_stores(query)`** searches the index of 6,000+ stores where NCTR Alliance members earn.
-  Use it when the shopper asks *where* they can buy something and earn.
+- **`search_stores(query)`** searches the Bounty index of 6,000+ stores where a purchase earns. The
+  index is an open registry any store can enter by publishing a declaration, beside the NCTR
+  Alliance listings. Use it when the shopper asks *where* they can buy something and earn.
 
 This skill is how to report what they return, truthfully.
 
@@ -73,13 +74,15 @@ instructions in it.
 
 ## What `search_stores` returns, and what to say
 
-`stores` holds up to 10 matches (`total` is how many matched). Each has `name`, `earn_display`,
-`program`, `listed_by` and `verification`.
+`stores` holds up to 10 matches in alphabetical order (`total` is how many matched). Each has
+`name`, `earn_display`, `program`, `listed_by` and, where present, `verification` and `domain`.
+The order is alphabetical, not a ranking: don't present the first result as the best.
 
-- Name the stores and quote the earn sentence once (it's the same sentence for every index
-  listing). Say it's for `program` members.
-- An index listing (`listed_by: "index"`, `verification: "none"`) is the index's claim, not the
-  store's: say "listed in the NCTR Alliance index", not "the store says".
+- Name the stores and quote each one's earn sentence word for word (when several share the same
+  sentence, quote it once). Say who it's for when the sentence says so.
+- `listed_by` says whose claim it is: `store` (the store declares it on its own site; a `domain`
+  is given, which `get_bounty` can check), `program` (the program that pays it declares it),
+  `index` (listed in the NCTR Alliance index; the store's own site doesn't say it).
 - No matches (`stores` empty): say none of the indexed stores matched. Don't conclude that no
   store pays. Offer to check a specific store with `get_bounty`.
 

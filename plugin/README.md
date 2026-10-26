@@ -20,8 +20,9 @@ The connector has two read-only tools:
 - **`get_bounty(domain, product?)`** reads a store's own declaration (its
   `/.well-known/bounty.json`, or the object its `<link rel="bounty">` points to), checks it against
   the standard and its signature, and returns the store's sentence, the program and the object.
-- **`search_stores(query)`** searches an index of 6,000+ stores where NCTR Alliance members earn,
-  and returns up to 10 matches.
+- **`search_stores(query)`** searches the Bounty index of 6,000+ stores where a purchase earns, and
+  returns up to 10 matches in alphabetical order. The index is an open registry any store can enter
+  by publishing a declaration.
 
 ## Example prompts
 

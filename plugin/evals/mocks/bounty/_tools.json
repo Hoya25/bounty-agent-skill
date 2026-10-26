@@ -91,7 +91,7 @@
     {
       "name": "search_stores",
       "title": "Search the store index",
-      "description": "Search the NCTR Alliance index of 6,000+ stores where members earn on purchases, by store name or keyword. Returns up to 10 matching stores, each with its slug, name, earn_display (the earn sentence), program, listed_by (program: the program settles it; index: the index lists it) and verification (how the listing was checked), plus total, the number of matches. A store not in the index may still publish its own declaration: get_bounty checks any store directly. Read-only.",
+      "description": "Search the Bounty index of 6,000+ stores where a purchase earns, by store name or keyword. The index is an open registry any store can enter by publishing a declaration: a store whose own Open Bounty Schema declaration checks valid is added beside the NCTR Alliance listings. Returns up to 10 matches in alphabetical order, each with its slug, name, earn_display (the earn sentence), program, listed_by (store: the store declares it; program: the program that pays it declares it; index: the index lists it) and verification, plus total, the number of matches. get_bounty checks any store directly. Read-only.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -123,6 +123,9 @@
                   "type": "string"
                 },
                 "name": {
+                  "type": "string"
+                },
+                "domain": {
                   "type": "string"
                 },
                 "earn_display": {
